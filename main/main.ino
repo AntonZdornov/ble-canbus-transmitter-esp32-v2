@@ -10,7 +10,7 @@
 
 
 void setup() {
-  console.log("Hello World"); // Updated console log message
+  USBSerial.begin(115200); /* prepare for possible serial debug */
   initTouth();
   initLvgl();
   initUI();
