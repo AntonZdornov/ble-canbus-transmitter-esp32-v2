@@ -55,7 +55,7 @@ void battery_touch_cb(lv_event_t *e) {
         battery_set_level(new_level);
 
         char buf[16];
-        snprintf(buf, sizeof(buf), "Battery: %d%%", new_level);
+        snprintf(buf, sizeof(buf), "Energy: %d%%", new_level);
         lv_label_set_text(battery_label, buf);
     }
 
@@ -113,7 +113,7 @@ void initUI() {
                       NULL);
 
   battery_label = lv_label_create(battery_container);
-  lv_label_set_text(battery_label, "Battery: 0%");
+  lv_label_set_text(battery_label, "Energy: 0%");
   lv_obj_set_style_text_align(battery_label, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_style_text_color(battery_label, lv_color_white(), 0);
   lv_obj_set_style_text_font(battery_label, &lv_font_montserrat_22, 0);
@@ -125,7 +125,7 @@ void initUI() {
 void updateBatteryLevel(int soc) {
   uint8_t normalized = convertBatteryData(soc);
   char buf[16];
-  snprintf(buf, sizeof(buf), "Battery: %d%%", normalized);
+  snprintf(buf, sizeof(buf), "Energy: %d%%", normalized);
   battery_set_level(normalized);
   lv_label_set_text(battery_label, buf);
 }

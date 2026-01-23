@@ -48,7 +48,7 @@ static void draw_battery_level(uint8_t percent)
         border_dsc.bg_opa       = LV_OPA_TRANSP;
         border_dsc.border_opa   = LV_OPA_COVER;
         border_dsc.border_width = 2;
-        border_dsc.border_color = lv_color_hex(0x9e9e9e); // голубой контур
+        border_dsc.border_color = lv_color_hex(0x3c3c3c); // голубой контур
         border_dsc.radius       = BAT_H / 4;              // закруглённые края
         border_inited = true;
     }

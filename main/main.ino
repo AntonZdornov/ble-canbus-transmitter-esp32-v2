@@ -6,14 +6,20 @@
 #include "Arduino_DriveBus_Library.h"
 #include "touth_driver.h"
 #include "lvgl_driver.h"
+#include "elm327_service.h"
+#include <WiFi.h>
 #include "wifi_service.h"
 
+// WIFISettings
+WiFiClient client;
 
 void setup() {
   USBSerial.begin(115200); /* prepare for possible serial debug */
   initTouth();
   initLvgl();
   initUI();
+  updateBatteryLevel(50);
+  delay(5);
   initWifi();
 }
 
@@ -23,7 +29,9 @@ void loop() {
   static uint32_t lastQuery = 0;
   if (millis() - lastQuery > 1000) {
     uint8_t soc = 0;
+
     if (readSocRaw(client, soc)) {
+      
       updateBatteryLevel(soc);
     }
     lastQuery = millis();

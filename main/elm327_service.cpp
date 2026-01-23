@@ -1,6 +1,7 @@
 #include "elm327_service.h"
 #include <vector>
 #include <wifi.h>
+#include "globals.h"
 
 const char *ELM327Socket = "192.168.0.10";
 const uint16_t ELM327Port = 35000;
