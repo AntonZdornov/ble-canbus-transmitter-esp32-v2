@@ -9,6 +9,8 @@
 #include "elm327_service.h"
 #include <WiFi.h>
 #include "wifi_service.h"
+#include "globals.h"
+#include "utils.h"
 
 // WIFISettings
 WiFiClient client;
@@ -17,8 +19,7 @@ void setup() {
   USBSerial.begin(115200); /* prepare for possible serial debug */
   initTouth();
   initLvgl();
-  initUI();
-  updateBatteryLevel(50);
+  ui_init();
   delay(5);
   initWifi();
 }
@@ -28,12 +29,23 @@ void loop() {
 
   static uint32_t lastQuery = 0;
   if (millis() - lastQuery > 1000) {
-    uint8_t soc = 0;
+    uint8_t soc_raw = 0;
+    uint16_t rpm;
+    UiData data{};
+    data.distance_km = -1;
+    data.time_minutes = -1;
+    data.battery_percent = -1;
 
-    if (readSocRaw(client, soc)) {
-      
-      updateBatteryLevel(soc);
+    if (readSocRaw(client, soc_raw)) {
+      data.battery_percent = convertBatteryData(soc_raw);
     }
+
+    // if(readEngineRpm(client, rpm)){
+    //   USBSerial.print("RPM:");
+    //   USBSerial.println(rpm);
+    // }
+
+    ui_set_data(data);
     lastQuery = millis();
   }
 

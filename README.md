@@ -31,6 +31,26 @@ This project uses an ELM327 Wi-Fi adapter to read CAN bus data, process incoming
 - Customizable CAN filters.
 - Bi-directional communication (BLE to CAN).
 
+## UI Simulator (macOS)
+This project includes a PC simulator for fast LVGL UI iteration.
+
+Requirements:
+- SDL2 via Homebrew: `brew install sdl2`
+
+Build and run:
+```sh
+cmake -S simulator -B simulator/build
+cmake --build simulator/build
+./simulator/build/ui_sim
+```
+
+What to expect:
+- A window opens with the LVGL UI.
+- Mock data updates every ~500ms (battery, time, distance).
+- Close the window to stop the simulator.
+
+If the window size looks wrong, adjust `LV_HOR_RES_MAX` / `LV_VER_RES_MAX` in `/Users/anton/Documents/projects/arduino/ble-canbus-transmitter-esp32-v2/simulator/lv_conf.h`.
+
 
 
 ## License

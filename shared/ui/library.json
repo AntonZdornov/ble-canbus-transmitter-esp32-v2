@@ -1,0 +1,8 @@
+{
+  "name": "ui_shared",
+  "version": "0.1.0",
+  "description": "Shared LVGL UI module for ESP32 and PC simulator",
+  "build": {
+    "srcDir": "src"
+  }
+}
