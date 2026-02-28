@@ -1,5 +1,6 @@
 # ELM327 CAN to BLE Bridge
 # ble-canbus-transmitter-esp32-v2 on ESP32-S3-Touch-LCD-1.69
+# ESP32-S3 1.69inch Touch Display Development Board, 240×280 Pixels
 
 This project uses an ELM327 Wi-Fi adapter to read CAN bus data, process incoming messages, and broadcast them via BLE (Bluetooth Low Energy) to other devices.
 

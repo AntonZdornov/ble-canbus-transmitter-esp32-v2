@@ -8,7 +8,30 @@ const char *password = "";
 void initWifi() {
   WiFi.mode(WIFI_STA);
   WiFi.setTxPower(WIFI_POWER_19_5dBm);
-  // WiFi.setSleep(false);
+  WiFi.setSleep(false);
+  USBSerial.println("Scanning WiFi...");
+  int networks = WiFi.scanNetworks();
+  if (networks >= 0) {
+    USBSerial.print("WiFi networks found: ");
+    USBSerial.println(networks);
+    for (int i = 0; i < networks; ++i) {
+      USBSerial.print("  ");
+      USBSerial.print(i + 1);
+      USBSerial.print(". ");
+      USBSerial.print(WiFi.SSID(i));
+      USBSerial.print(" | RSSI ");
+      USBSerial.print(WiFi.RSSI(i));
+      USBSerial.print(" dBm | CH ");
+      USBSerial.print(WiFi.channel(i));
+      USBSerial.print(" | ENC ");
+      USBSerial.println((int)WiFi.encryptionType(i));
+    }
+  } else {
+    USBSerial.print("WiFi scan failed, status: ");
+    USBSerial.println(networks);
+  }
+  WiFi.scanDelete();
+
   WiFi.begin(ssid, password);
   bool animation = true;
 
