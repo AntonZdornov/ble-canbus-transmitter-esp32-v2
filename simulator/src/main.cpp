@@ -25,7 +25,7 @@ static void update_mock_data(UiData &data) {
 
   data.battery_percent = battery;
   data.time_minutes = minutes;
-  data.distance_km = distance;
+  data.rpm = distance;
 }
 
 int main() {
@@ -54,7 +54,7 @@ int main() {
 
   UiData data{};
   data.battery_percent = 100;
-  data.distance_km = 0;
+  data.rpm = 0;
   data.time_minutes = 0;
   ui_set_data(data);
 

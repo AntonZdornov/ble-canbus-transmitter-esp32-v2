@@ -30,9 +30,8 @@ void loop() {
   static uint32_t lastQuery = 0;
   if (millis() - lastQuery > 1000) {
     uint8_t soc_raw = 0;
-    uint16_t rpm;
     UiData data{};
-    data.distance_km = -1;
+    data.rpm = -1;
     data.time_minutes = -1;
     data.battery_percent = -1;
 
@@ -40,10 +39,10 @@ void loop() {
       data.battery_percent = convertBatteryData(soc_raw);
     }
 
-    // if(readEngineRpm(client, rpm)){
-    //   USBSerial.print("RPM:");
-    //   USBSerial.println(rpm);
-    // }
+    uint16_t rpm;
+    if (readEngineRpm(client, rpm)) {
+      data.rpm = rpm;
+    }
 
     ui_set_data(data);
     lastQuery = millis();
