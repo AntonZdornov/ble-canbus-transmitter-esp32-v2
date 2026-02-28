@@ -4,9 +4,11 @@
 
 // UI components
 static lv_obj_t *time_value_label;
-static lv_obj_t *rpm_value_label;
+static lv_obj_t *distance_value_label;
+static lv_obj_t *fuel_value_label;
 static lv_obj_t *battery_percent_label;
 static lv_obj_t *battery_caption_label;
+static lv_obj_t *drive_mode_label;
 
 extern const lv_font_t lv_font_montserrat_48;
 extern const lv_font_t lv_font_montserrat_38;
@@ -39,7 +41,7 @@ void ui_init() {
   lv_obj_set_style_bg_opa(root_container, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_clear_flag(root_container, LV_OBJ_FLAG_SCROLLABLE);
 
-  // Top row: Time and RPM, each half width and centered
+  // Top row: Time and Distance, each half width and centered
   lv_obj_t *top_row = lv_obj_create(root_container);
   lv_obj_set_size(top_row, LV_PCT(100), LV_SIZE_CONTENT);
   lv_obj_set_style_bg_opa(top_row, LV_OPA_TRANSP, 0);
@@ -71,25 +73,45 @@ void ui_init() {
   lv_obj_set_style_text_font(time_value_label, &lv_font_montserrat_22, 0);
   lv_obj_align_to(time_value_label, time_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 2);
 
-  // RPM block (right half)
-  lv_obj_t *rpm_block = lv_obj_create(top_row);
-  lv_obj_set_size(rpm_block, LV_PCT(50), LV_SIZE_CONTENT);
-  lv_obj_set_style_bg_opa(rpm_block, LV_OPA_TRANSP, 0);
-  lv_obj_set_style_border_width(rpm_block, 0, 0);
-  lv_obj_clear_flag(rpm_block, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_style_pad_all(rpm_block, 0, 0);
+  // Distance block (right half)
+  lv_obj_t *distance_block = lv_obj_create(top_row);
+  lv_obj_set_size(distance_block, LV_PCT(50), LV_SIZE_CONTENT);
+  lv_obj_set_style_bg_opa(distance_block, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(distance_block, 0, 0);
+  lv_obj_clear_flag(distance_block, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_pad_all(distance_block, 0, 0);
 
-  lv_obj_t *rpm_label = lv_label_create(rpm_block);
-  lv_label_set_text(rpm_label, "RPM");
-  lv_obj_set_style_text_color(rpm_label, lv_color_hex(0xB0B0B0), 0);
-  lv_obj_set_style_text_font(rpm_label, &lv_font_montserrat_12, 0);
-  lv_obj_align(rpm_label, LV_ALIGN_TOP_MID, 0, 0);
+  lv_obj_t *distance_label = lv_label_create(distance_block);
+  lv_label_set_text(distance_label, "Distance");
+  lv_obj_set_style_text_color(distance_label, lv_color_hex(0xB0B0B0), 0);
+  lv_obj_set_style_text_font(distance_label, &lv_font_montserrat_12, 0);
+  lv_obj_align(distance_label, LV_ALIGN_TOP_MID, 0, 0);
 
-  rpm_value_label = lv_label_create(rpm_block);
-  lv_label_set_text(rpm_value_label, "--");
-  lv_obj_set_style_text_color(rpm_value_label, lv_color_white(), 0);
-  lv_obj_set_style_text_font(rpm_value_label, &lv_font_montserrat_22, 0);
-  lv_obj_align_to(rpm_value_label, rpm_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 2);
+  distance_value_label = lv_label_create(distance_block);
+  lv_label_set_text(distance_value_label, "-- km");
+  lv_obj_set_style_text_color(distance_value_label, lv_color_white(), 0);
+  lv_obj_set_style_text_font(distance_value_label, &lv_font_montserrat_22, 0);
+  lv_obj_align_to(distance_value_label, distance_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 2);
+
+  // Fuel level (centered under top row)
+  lv_obj_t *fuel_label = lv_label_create(root_container);
+  lv_label_set_text(fuel_label, "Fuel");
+  lv_obj_set_style_text_color(fuel_label, lv_color_hex(0xB0B0B0), 0);
+  lv_obj_set_style_text_font(fuel_label, &lv_font_montserrat_12, 0);
+  lv_obj_align_to(fuel_label, top_row, LV_ALIGN_OUT_BOTTOM_MID, 0, 8);
+
+  fuel_value_label = lv_label_create(root_container);
+  lv_label_set_text(fuel_value_label, "--%");
+  lv_obj_set_style_text_color(fuel_value_label, lv_color_white(), 0);
+  lv_obj_set_style_text_font(fuel_value_label, &lv_font_montserrat_22, 0);
+  lv_obj_align_to(fuel_value_label, fuel_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 2);
+
+  // Drive mode indicator (center)
+  drive_mode_label = lv_label_create(root_container);
+  lv_label_set_text(drive_mode_label, "--");
+  lv_obj_set_style_text_color(drive_mode_label, lv_color_white(), 0);
+  lv_obj_set_style_text_font(drive_mode_label, &lv_font_montserrat_22, 0);
+  lv_obj_align(drive_mode_label, LV_ALIGN_CENTER, 0, -26);
 
   // Center: Battery percent
   battery_percent_label = lv_label_create(root_container);
@@ -111,11 +133,18 @@ void ui_set_data(const UiData &data) {
   format_time_minutes(data.time_minutes, buf, sizeof(buf));
   set_label_text(time_value_label, buf);
 
-  if (data.rpm < 0) {
-    set_label_text(rpm_value_label, "--");
+  if (data.distance_km < 0) {
+    set_label_text(distance_value_label, "-- km");
   } else {
-    snprintf(buf, sizeof(buf), "%d", data.rpm);
-    set_label_text(rpm_value_label, buf);
+    snprintf(buf, sizeof(buf), "%d km", data.distance_km);
+    set_label_text(distance_value_label, buf);
+  }
+
+  if (data.fuel_percent < 0) {
+    set_label_text(fuel_value_label, "--%");
+  } else {
+    snprintf(buf, sizeof(buf), "%d%%", data.fuel_percent);
+    set_label_text(fuel_value_label, buf);
   }
 
   if (data.battery_percent < 0) {
@@ -124,12 +153,26 @@ void ui_set_data(const UiData &data) {
     snprintf(buf, sizeof(buf), "%d%%", data.battery_percent);
     set_label_text(battery_percent_label, buf);
   }
+
+  // Drive mode: ICE if engine_on == 1, EV if 0
+  if (drive_mode_label) {
+    if (data.engine_on == 1) {
+      set_label_text(drive_mode_label, "ICE");
+    } else if (data.engine_on == 0) {
+      set_label_text(drive_mode_label, "EV");
+    } else {
+      set_label_text(drive_mode_label, "--");
+    }
+  }
 }
 
 void updateBatteryLevel(int raw) {
   UiData data{};
   data.battery_percent = raw;
-  data.rpm = -1;
+  data.speed_kmh = -1;
+  data.fuel_percent = -1;
+  data.distance_km = -1;
+  data.engine_on = -1;
   data.time_minutes = -1;
   ui_set_data(data);
 }
