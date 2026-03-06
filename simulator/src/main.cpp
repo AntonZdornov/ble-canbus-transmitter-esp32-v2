@@ -12,7 +12,8 @@ static void update_mock_data(UiData &data) {
   static int rpm = 800;
   static int speed = 0;
   static int fuel = 100;
-  static float distance_km = 0.0f;
+  static float trip_km = 0.0f;
+  static float service_km = 123.0f;
 
   battery += dir;
   if (battery <= 5) {
@@ -30,13 +31,16 @@ static void update_mock_data(UiData &data) {
   if (speed > 130) speed = 0;
   fuel -= 1;
   if (fuel < 5) fuel = 100;
-  distance_km += (float)speed * (0.5f / 3600.0f);
+  float delta = (float)speed * (0.5f / 3600.0f);
+  trip_km += delta;
+  service_km += delta;
 
   data.battery_percent = battery;
   data.time_minutes = minutes;
   data.speed_kmh = speed;
   data.fuel_percent = fuel;
-  data.distance_km = (int)(distance_km + 0.5f);
+  data.distance_km = (int)(trip_km + 0.5f);
+  data.service_distance_km = (int)(service_km + 0.5f);
   data.engine_on = (rpm > 0) ? 1 : 0;
 }
 
@@ -69,6 +73,7 @@ int main() {
   data.speed_kmh = 0;
   data.fuel_percent = 100;
   data.distance_km = 0;
+  data.service_distance_km = 123;
   data.engine_on = 0;
   data.time_minutes = 0;
   ui_set_data(data);

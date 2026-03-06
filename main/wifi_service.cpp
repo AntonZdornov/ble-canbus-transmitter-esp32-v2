@@ -7,8 +7,8 @@ const char *password = "";
 
 void initWifi() {
   WiFi.mode(WIFI_STA);
-  WiFi.setTxPower(WIFI_POWER_19_5dBm);
   WiFi.setSleep(false);
+  WiFi.setTxPower(WIFI_POWER_19_5dBm);
   USBSerial.println("Scanning WiFi...");
   int networks = WiFi.scanNetworks();
   if (networks >= 0) {

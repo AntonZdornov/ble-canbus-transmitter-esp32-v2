@@ -6,6 +6,7 @@
 static const char *ELM327Socket = "192.168.0.10";
 static const uint16_t ELM327Port = 35000;
 static const uint16_t ELM327Timeout = 3000;
+static const uint32_t ELM327LineBufferSize = 96;
 
 static bool ensureElmConnected(WiFiClient &client) {
   if (WiFi.status() != WL_CONNECTED) {
@@ -20,15 +21,16 @@ static bool ensureElmConnected(WiFiClient &client) {
     return false;
   }
 
-  client.print("ATZ\r");  delay(800);
-  client.print("ATE0\r"); delay(200);
-  client.print("ATL0\r"); delay(200);
-  client.print("ATH0\r"); delay(200);
-  client.print("ATSP6\r"); delay(500);
+  client.setTimeout(80);
+  client.print("ATZ\r");  delay(120);
+  client.print("ATE0\r"); delay(60);
+  client.print("ATL0\r"); delay(60);
+  client.print("ATH0\r"); delay(60);
+  client.print("ATSP6\r"); delay(120);
 
   // подчистим хвосты после init
   unsigned long t = millis();
-  while (millis() - t < 300) {
+  while (millis() - t < 120) {
     while (client.available()) client.read();
     delay(10);
   }
@@ -36,17 +38,35 @@ static bool ensureElmConnected(WiFiClient &client) {
   return true;
 }
 
-static bool readObdLineWithPrefix(WiFiClient &client, const char *prefix, String &outLine, uint32_t waitMs = 1000) {
+static bool readObdLineWithPrefix(WiFiClient &client, const char *prefix, String &outLine, uint32_t waitMs, bool *no_data = nullptr) {
   unsigned long start = millis();
+  char lineBuf[ELM327LineBufferSize];
+  size_t lineLen = 0;
   while (millis() - start < waitMs) {
-    if (client.available()) {
-      String line = client.readStringUntil('\n');
+    while (client.available()) {
+      char ch = (char)client.read();
+      if (ch == '\r') continue;
+
+      bool lineReady = false;
+      if (ch == '\n' || ch == '>') {
+        lineReady = true;
+      } else if (lineLen < sizeof(lineBuf) - 1) {
+        lineBuf[lineLen++] = ch;
+      }
+
+      if (!lineReady) continue;
+
+      lineBuf[lineLen] = '\0';
+      String line = String(lineBuf);
       line.trim();
+      lineLen = 0;
       if (line.length() == 0) continue;
 
-      USBSerial.println(line);
-
       if (line == ">") continue;
+      if (line == "NO DATA") {
+        if (no_data) *no_data = true;
+        return false;
+      }
 
       int p = line.indexOf(prefix);
       if (p >= 0) {
@@ -55,6 +75,7 @@ static bool readObdLineWithPrefix(WiFiClient &client, const char *prefix, String
         return true;
       }
     }
+    delay(1);
   }
   return false;
 }
@@ -76,7 +97,7 @@ static bool splitTokens(const String &line, std::vector<String> &parts) {
 
 // ===== SOC (PID 01 5B) =====
 // Возвращает raw байт A (0..255) как раньше
-bool readSocRaw(WiFiClient &client, uint8_t &soc) {
+bool readSocRaw(WiFiClient &client, uint8_t &soc, uint32_t waitMs) {
   soc = 0;
   if (!ensureElmConnected(client)) return false;
 
@@ -86,7 +107,7 @@ bool readSocRaw(WiFiClient &client, uint8_t &soc) {
   USBSerial.println("Battery request: <01 5B>");
 
   String line;
-  if (!readObdLineWithPrefix(client, "41 5B", line, 1000)) {
+  if (!readObdLineWithPrefix(client, "41 5B", line, waitMs)) {
     USBSerial.println("Timeout waiting for SOC response");
     return false;
   }
@@ -110,7 +131,7 @@ bool readSocRaw(WiFiClient &client, uint8_t &soc) {
 }
 
 // ===== RPM (PID 01 0C) =====
-bool readEngineRpm(WiFiClient &client, uint16_t &rpm) {
+bool readEngineRpm(WiFiClient &client, uint16_t &rpm, uint32_t waitMs) {
   rpm = 0;
   if (!ensureElmConnected(client)) return false;
 
@@ -120,7 +141,7 @@ bool readEngineRpm(WiFiClient &client, uint16_t &rpm) {
   USBSerial.println("RPM request: <01 0C>");
 
   String line;
-  if (!readObdLineWithPrefix(client, "41 0C", line, 1000)) {
+  if (!readObdLineWithPrefix(client, "41 0C", line, waitMs)) {
     USBSerial.println("Timeout waiting for RPM response");
     return false;
   }
@@ -135,8 +156,9 @@ bool readEngineRpm(WiFiClient &client, uint16_t &rpm) {
 
     rpm = (uint16_t)(((a * 256L) + b) / 4L);
 
-    USBSerial.print("RPM parsed: ");
-    USBSerial.println(rpm);
+    USBSerial.print("Engine RPM: ");
+    USBSerial.print(rpm);
+    USBSerial.println(" rpm");
     return true;
   }
 
@@ -146,7 +168,7 @@ bool readEngineRpm(WiFiClient &client, uint16_t &rpm) {
 
 // ===== Speed (PID 01 0D) =====
 // A = km/h
-bool readVehicleSpeed(WiFiClient &client, uint8_t &speedKmh) {
+bool readVehicleSpeed(WiFiClient &client, uint8_t &speedKmh, uint32_t waitMs) {
   speedKmh = 0;
   if (!ensureElmConnected(client)) return false;
 
@@ -156,7 +178,7 @@ bool readVehicleSpeed(WiFiClient &client, uint8_t &speedKmh) {
   USBSerial.println("Speed request: <01 0D>");
 
   String line;
-  if (!readObdLineWithPrefix(client, "41 0D", line, 1000)) {
+  if (!readObdLineWithPrefix(client, "41 0D", line, waitMs)) {
     USBSerial.println("Timeout waiting for Speed response");
     return false;
   }
@@ -181,7 +203,7 @@ bool readVehicleSpeed(WiFiClient &client, uint8_t &speedKmh) {
 
 // ===== Engine Load (PID 01 04) =====
 // % = A*100/255
-bool readEngineLoad(WiFiClient &client, uint8_t &loadPercent) {
+bool readEngineLoad(WiFiClient &client, uint8_t &loadPercent, uint32_t waitMs) {
   loadPercent = 0;
   if (!ensureElmConnected(client)) return false;
 
@@ -191,7 +213,7 @@ bool readEngineLoad(WiFiClient &client, uint8_t &loadPercent) {
   USBSerial.println("Engine Load request: <01 04>");
 
   String line;
-  if (!readObdLineWithPrefix(client, "41 04", line, 1000)) {
+  if (!readObdLineWithPrefix(client, "41 04", line, waitMs)) {
     USBSerial.println("Timeout waiting for Load response");
     return false;
   }
@@ -216,7 +238,7 @@ bool readEngineLoad(WiFiClient &client, uint8_t &loadPercent) {
 
 // ===== Fuel Level (PID 01 2F) =====
 // % = A*100/255
-bool readFuelLevel(WiFiClient &client, uint8_t &fuelPercent) {
+bool readFuelLevel(WiFiClient &client, uint8_t &fuelPercent, uint32_t waitMs) {
   fuelPercent = 0;
   if (!ensureElmConnected(client)) return false;
 
@@ -226,8 +248,13 @@ bool readFuelLevel(WiFiClient &client, uint8_t &fuelPercent) {
   USBSerial.println("Fuel Level request: <01 2F>");
 
   String line;
-  if (!readObdLineWithPrefix(client, "41 2F", line, 1000)) {
-    USBSerial.println("Timeout waiting for Fuel Level response");
+  bool no_data = false;
+  if (!readObdLineWithPrefix(client, "41 2F", line, waitMs, &no_data)) {
+    if (no_data) {
+      USBSerial.println("Fuel Level: NO DATA (PID 01 2F not supported)");
+    } else {
+      USBSerial.println("Timeout waiting for Fuel Level response");
+    }
     return false;
   }
 
