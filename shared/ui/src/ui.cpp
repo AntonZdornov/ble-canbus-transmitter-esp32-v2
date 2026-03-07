@@ -7,20 +7,22 @@ static lv_obj_t *main_screen;
 static lv_obj_t *service_screen;
 static lv_obj_t *time_value_label;
 static lv_obj_t *distance_value_label;
+static lv_obj_t *ev_distance_value_label;
 static lv_obj_t *fuel_icon_canvas;
 static lv_obj_t *fuel_value_label;
 static lv_obj_t *soc_icon_canvas;
 static lv_obj_t *battery_percent_label;
-static lv_obj_t *drive_mode_label;
 static lv_obj_t *service_distance_value_label;
+static lv_obj_t *wifi_icon_canvas;
 static void (*reset_distance_cb)() = nullptr;
+static void (*wifi_reconnect_cb)() = nullptr;
 
 static lv_color_t icon_fuel_color = {0};
 static lv_color_t icon_soc_color = {0};
 
 static lv_color_t fuel_icon_buf[LV_CANVAS_BUF_SIZE_TRUE_COLOR(22, 22)];
 static lv_color_t soc_icon_buf[LV_CANVAS_BUF_SIZE_TRUE_COLOR(22, 22)];
-
+static lv_color_t wifi_icon_buf[LV_CANVAS_BUF_SIZE_TRUE_COLOR(22, 22)];
 
 extern const lv_font_t lv_font_montserrat_48;
 extern const lv_font_t lv_font_montserrat_38;
@@ -61,7 +63,6 @@ static void draw_fuel_icon(lv_obj_t *canvas, lv_color_t c) {
   if (!canvas) return;
   lv_canvas_fill_bg(canvas, lv_color_black(), LV_OPA_TRANSP);
 
-  // Droplet: circle + simple triangle drawn with lines (no triangle API)
   lv_draw_rect_dsc_t circle;
   lv_draw_rect_dsc_init(&circle);
   circle.bg_opa = LV_OPA_COVER;
@@ -85,7 +86,6 @@ static void draw_soc_icon(lv_obj_t *canvas, lv_color_t c) {
   if (!canvas) return;
   lv_canvas_fill_bg(canvas, lv_color_black(), LV_OPA_TRANSP);
 
-  // Vertical battery body
   lv_draw_rect_dsc_t body;
   lv_draw_rect_dsc_init(&body);
   body.bg_opa = LV_OPA_TRANSP;
@@ -95,7 +95,6 @@ static void draw_soc_icon(lv_obj_t *canvas, lv_color_t c) {
   body.radius = 2;
   lv_canvas_draw_rect(canvas, 7, 4, 8, 14, &body);
 
-  // Battery tip
   lv_draw_rect_dsc_t tip;
   lv_draw_rect_dsc_init(&tip);
   tip.bg_opa = LV_OPA_COVER;
@@ -103,13 +102,41 @@ static void draw_soc_icon(lv_obj_t *canvas, lv_color_t c) {
   tip.radius = 1;
   lv_canvas_draw_rect(canvas, 9, 2, 4, 2, &tip);
 
-  // Inner level block
   lv_draw_rect_dsc_t level;
   lv_draw_rect_dsc_init(&level);
   level.bg_opa = LV_OPA_COVER;
   level.bg_color = c;
   level.radius = 1;
   lv_canvas_draw_rect(canvas, 9, 10, 4, 6, &level);
+}
+
+static void draw_wifi_icon(lv_obj_t *canvas, lv_color_t c, bool connected) {
+  if (!canvas) return;
+  lv_canvas_fill_bg(canvas, lv_color_black(), LV_OPA_TRANSP);
+
+  lv_draw_line_dsc_t d;
+  lv_draw_line_dsc_init(&d);
+  d.color = c;
+  d.width = 2;
+
+  lv_point_t arc1[] = {{3, 11}, {7, 8}, {11, 7}, {15, 8}, {19, 11}};
+  lv_point_t arc2[] = {{6, 13}, {9, 11}, {11, 10}, {13, 11}, {16, 13}};
+  lv_point_t arc3[] = {{9, 16}, {11, 15}, {13, 16}};
+  lv_canvas_draw_line(canvas, arc1, 5, &d);
+  lv_canvas_draw_line(canvas, arc2, 5, &d);
+  lv_canvas_draw_line(canvas, arc3, 3, &d);
+
+  lv_draw_rect_dsc_t dot;
+  lv_draw_rect_dsc_init(&dot);
+  dot.bg_opa = LV_OPA_COVER;
+  dot.bg_color = c;
+  dot.radius = LV_RADIUS_CIRCLE;
+  lv_canvas_draw_rect(canvas, 10, 18, 3, 3, &dot);
+
+  if (!connected) {
+    lv_point_t slash[] = {{5, 19}, {19, 4}};
+    lv_canvas_draw_line(canvas, slash, 2, &d);
+  }
 }
 
 static void format_time_minutes(int minutes, char *buf, size_t buf_len) {
@@ -141,6 +168,12 @@ static void handle_reset_btn_event(lv_event_t *e) {
   }
 }
 
+static void handle_wifi_icon_event(lv_event_t *e) {
+  if (lv_event_get_code(e) == LV_EVENT_CLICKED && wifi_reconnect_cb) {
+    wifi_reconnect_cb();
+  }
+}
+
 void ui_init() {
   main_screen = lv_obj_create(NULL);
   service_screen = lv_obj_create(NULL);
@@ -157,75 +190,39 @@ void ui_init() {
   lv_obj_set_style_bg_opa(root_container, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_clear_flag(root_container, LV_OBJ_FLAG_SCROLLABLE);
 
-  // Top row: Time and Distance, each half width and centered
-  lv_obj_t *top_row = lv_obj_create(root_container);
-  lv_obj_set_size(top_row, LV_PCT(100), LV_SIZE_CONTENT);
-  lv_obj_set_style_bg_opa(top_row, LV_OPA_TRANSP, 0);
-  lv_obj_set_style_border_width(top_row, 0, 0);
-  lv_obj_clear_flag(top_row, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_style_pad_all(top_row, 0, 0);
-  lv_obj_set_style_pad_row(top_row, 0, 0);
-  lv_obj_set_style_pad_column(top_row, 0, 0);
-  lv_obj_set_flex_flow(top_row, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(top_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+  lv_obj_t *header_row = lv_obj_create(root_container);
+  lv_obj_set_size(header_row, LV_PCT(100), LV_SIZE_CONTENT);
+  lv_obj_set_style_bg_opa(header_row, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(header_row, 0, 0);
+  lv_obj_clear_flag(header_row, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_pad_left(header_row, 20, 0);
+  lv_obj_set_style_pad_right(header_row, 20, 0);
+  lv_obj_set_style_pad_top(header_row, 1, 0);
+  lv_obj_set_style_pad_bottom(header_row, 1, 0);
+  lv_obj_set_flex_flow(header_row, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(header_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-  // Time block (left half)
-  lv_obj_t *time_block = lv_obj_create(top_row);
-  lv_obj_set_size(time_block, LV_PCT(50), LV_SIZE_CONTENT);
-  lv_obj_set_style_bg_opa(time_block, LV_OPA_TRANSP, 0);
-  lv_obj_set_style_border_width(time_block, 0, 0);
-  lv_obj_clear_flag(time_block, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_style_pad_all(time_block, 0, 0);
-
-  lv_obj_t *time_label = lv_label_create(time_block);
-  lv_label_set_text(time_label, "Time");
-  lv_obj_set_style_text_color(time_label, lv_color_hex(0xB0B0B0), 0);
-  lv_obj_set_style_text_font(time_label, &lv_font_montserrat_22, 0);
-  lv_obj_align(time_label, LV_ALIGN_TOP_MID, 0, 0);
-
-  time_value_label = lv_label_create(time_block);
+  time_value_label = lv_label_create(header_row);
   lv_label_set_text(time_value_label, "--:--");
   lv_obj_set_style_text_color(time_value_label, lv_color_white(), 0);
-  lv_obj_set_style_text_font(time_value_label, &lv_font_montserrat_26, 0);
-  lv_obj_align_to(time_value_label, time_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 2);
+  lv_obj_set_style_text_font(time_value_label, &lv_font_montserrat_22, 0);
 
-  // Distance block (right half)
-  lv_obj_t *distance_block = lv_obj_create(top_row);
-  lv_obj_set_size(distance_block, LV_PCT(50), LV_SIZE_CONTENT);
-  lv_obj_set_style_bg_opa(distance_block, LV_OPA_TRANSP, 0);
-  lv_obj_set_style_border_width(distance_block, 0, 0);
-  lv_obj_clear_flag(distance_block, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_style_pad_all(distance_block, 0, 0);
+  wifi_icon_canvas = lv_canvas_create(header_row);
+  lv_canvas_set_buffer(wifi_icon_canvas, wifi_icon_buf, 22, 22, LV_IMG_CF_TRUE_COLOR);
+  draw_wifi_icon(wifi_icon_canvas, lv_color_hex(0x6C6C6C), false);
+  lv_obj_add_flag(wifi_icon_canvas, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(wifi_icon_canvas, handle_wifi_icon_event, LV_EVENT_CLICKED, nullptr);
 
-  lv_obj_t *distance_label = lv_label_create(distance_block);
-  lv_label_set_text(distance_label, "Distance");
-  lv_obj_set_style_text_color(distance_label, lv_color_hex(0xB0B0B0), 0);
-  lv_obj_set_style_text_font(distance_label, &lv_font_montserrat_22, 0);
-  lv_obj_align(distance_label, LV_ALIGN_TOP_MID, 0, 0);
-
-  distance_value_label = lv_label_create(distance_block);
-  lv_label_set_text(distance_value_label, "-- km");
-  lv_obj_set_style_text_color(distance_value_label, lv_color_white(), 0);
-  lv_obj_set_style_text_font(distance_value_label, &lv_font_montserrat_26, 0);
-  lv_obj_align_to(distance_value_label, distance_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 2);
-
-  // Drive mode indicator removed
-  drive_mode_label = nullptr;
-
-  // Bottom row: Fuel and Battery SOC, split in two parts
   lv_obj_t *bottom_row = lv_obj_create(root_container);
   lv_obj_set_size(bottom_row, LV_PCT(100), LV_SIZE_CONTENT);
   lv_obj_set_style_bg_opa(bottom_row, LV_OPA_TRANSP, 0);
   lv_obj_set_style_border_width(bottom_row, 0, 0);
   lv_obj_clear_flag(bottom_row, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_style_pad_all(bottom_row, 0, 0);
-  lv_obj_set_style_pad_row(bottom_row, 0, 0);
-  lv_obj_set_style_pad_column(bottom_row, 0, 0);
   lv_obj_set_flex_flow(bottom_row, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(bottom_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
   lv_obj_align(bottom_row, LV_ALIGN_BOTTOM_MID, 0, -6);
 
-  // Fuel block (left half)
   lv_obj_t *fuel_block = lv_obj_create(bottom_row);
   lv_obj_set_size(fuel_block, LV_PCT(50), LV_SIZE_CONTENT);
   lv_obj_set_style_bg_opa(fuel_block, LV_OPA_TRANSP, 0);
@@ -233,11 +230,32 @@ void ui_init() {
   lv_obj_clear_flag(fuel_block, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_style_pad_all(fuel_block, 0, 0);
 
+  lv_obj_t *distance_label = lv_label_create(fuel_block);
+  lv_label_set_text(distance_label, "Dist");
+  lv_obj_set_style_text_color(distance_label, lv_color_hex(0xB0B0B0), 0);
+  lv_obj_set_style_text_font(distance_label, &lv_font_montserrat_22, 0);
+  lv_obj_align(distance_label, LV_ALIGN_TOP_MID, 0, 0);
+
+  distance_value_label = lv_label_create(fuel_block);
+  lv_label_set_text(distance_value_label, "-- km");
+  lv_obj_set_style_text_color(distance_value_label, lv_color_white(), 0);
+  lv_obj_set_style_text_font(distance_value_label, &lv_font_montserrat_22, 0);
+  lv_obj_align_to(distance_value_label, distance_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 2);
+
+  lv_obj_t *fuel_sep = lv_obj_create(fuel_block);
+  lv_obj_set_size(fuel_sep, LV_PCT(82), 1);
+  lv_obj_set_style_bg_color(fuel_sep, lv_color_hex(0x5A5A5A), 0);
+  lv_obj_set_style_bg_opa(fuel_sep, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(fuel_sep, 0, 0);
+  lv_obj_set_style_radius(fuel_sep, 0, 0);
+  lv_obj_clear_flag(fuel_sep, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_align_to(fuel_sep, distance_value_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 4);
+
   lv_obj_t *fuel_label = lv_label_create(fuel_block);
   lv_label_set_text(fuel_label, "Fuel");
   lv_obj_set_style_text_color(fuel_label, lv_color_hex(0xB0B0B0), 0);
   lv_obj_set_style_text_font(fuel_label, &lv_font_montserrat_22, 0);
-  lv_obj_align(fuel_label, LV_ALIGN_TOP_MID, 0, 0);
+  lv_obj_align_to(fuel_label, fuel_sep, LV_ALIGN_OUT_BOTTOM_MID, 0, 4);
 
   lv_obj_t *fuel_row = lv_obj_create(fuel_block);
   lv_obj_set_size(fuel_row, LV_PCT(100), LV_SIZE_CONTENT);
@@ -260,7 +278,6 @@ void ui_init() {
   lv_obj_set_style_text_color(fuel_value_label, lv_color_white(), 0);
   lv_obj_set_style_text_font(fuel_value_label, &lv_font_montserrat_28, 0);
 
-  // Battery SOC block (right half)
   lv_obj_t *battery_block = lv_obj_create(bottom_row);
   lv_obj_set_size(battery_block, LV_PCT(50), LV_SIZE_CONTENT);
   lv_obj_set_style_bg_opa(battery_block, LV_OPA_TRANSP, 0);
@@ -268,11 +285,32 @@ void ui_init() {
   lv_obj_clear_flag(battery_block, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_style_pad_all(battery_block, 0, 0);
 
+  lv_obj_t *ev_distance_label = lv_label_create(battery_block);
+  lv_label_set_text(ev_distance_label, "EV");
+  lv_obj_set_style_text_color(ev_distance_label, lv_color_hex(0xB0B0B0), 0);
+  lv_obj_set_style_text_font(ev_distance_label, &lv_font_montserrat_22, 0);
+  lv_obj_align(ev_distance_label, LV_ALIGN_TOP_MID, 0, 0);
+
+  ev_distance_value_label = lv_label_create(battery_block);
+  lv_label_set_text(ev_distance_value_label, "-- km");
+  lv_obj_set_style_text_color(ev_distance_value_label, lv_color_white(), 0);
+  lv_obj_set_style_text_font(ev_distance_value_label, &lv_font_montserrat_22, 0);
+  lv_obj_align_to(ev_distance_value_label, ev_distance_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 2);
+
+  lv_obj_t *soc_sep = lv_obj_create(battery_block);
+  lv_obj_set_size(soc_sep, LV_PCT(82), 1);
+  lv_obj_set_style_bg_color(soc_sep, lv_color_hex(0x5A5A5A), 0);
+  lv_obj_set_style_bg_opa(soc_sep, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(soc_sep, 0, 0);
+  lv_obj_set_style_radius(soc_sep, 0, 0);
+  lv_obj_clear_flag(soc_sep, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_align_to(soc_sep, ev_distance_value_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 4);
+
   lv_obj_t *battery_label = lv_label_create(battery_block);
   lv_label_set_text(battery_label, "SOC");
   lv_obj_set_style_text_color(battery_label, lv_color_hex(0xB0B0B0), 0);
   lv_obj_set_style_text_font(battery_label, &lv_font_montserrat_22, 0);
-  lv_obj_align(battery_label, LV_ALIGN_TOP_MID, 0, 0);
+  lv_obj_align_to(battery_label, soc_sep, LV_ALIGN_OUT_BOTTOM_MID, 0, 4);
 
   lv_obj_t *soc_row = lv_obj_create(battery_block);
   lv_obj_set_size(soc_row, LV_PCT(100), LV_SIZE_CONTENT);
@@ -295,7 +333,6 @@ void ui_init() {
   lv_obj_set_style_text_color(battery_percent_label, lv_color_hex(0x6CEB6C), 0);
   lv_obj_set_style_text_font(battery_percent_label, &lv_font_montserrat_28, 0);
 
-  // Service screen layout
   lv_obj_t *service_root = lv_obj_create(service_screen);
   lv_obj_set_size(service_root, LV_PCT(100), LV_PCT(100));
   lv_obj_set_style_pad_all(service_root, 10, LV_PART_MAIN);
@@ -332,11 +369,28 @@ void ui_set_data(const UiData &data) {
   format_time_minutes(data.time_minutes, buf, sizeof(buf));
   set_label_text(time_value_label, buf);
 
+  if (data.wifi_connected == 1) {
+    draw_wifi_icon(wifi_icon_canvas, lv_color_hex(0x6CEB6C), true);
+  } else if (data.wifi_connected == 2) {
+    draw_wifi_icon(wifi_icon_canvas, lv_color_hex(0x1D34FF), true);
+  } else if (data.wifi_connected == 0) {
+    draw_wifi_icon(wifi_icon_canvas, lv_color_hex(0xFF4040), false);
+  } else {
+    draw_wifi_icon(wifi_icon_canvas, lv_color_hex(0x6C6C6C), false);
+  }
+
   if (data.distance_km < 0) {
     set_label_text(distance_value_label, "-- km");
   } else {
     snprintf(buf, sizeof(buf), "%d km", data.distance_km);
     set_label_text(distance_value_label, buf);
+  }
+
+  if (data.ev_distance_km < 0) {
+    set_label_text(ev_distance_value_label, "-- km");
+  } else {
+    snprintf(buf, sizeof(buf), "%d km", data.ev_distance_km);
+    set_label_text(ev_distance_value_label, buf);
   }
 
   if (data.fuel_percent < 0) {
@@ -357,7 +411,6 @@ void ui_set_data(const UiData &data) {
     lv_obj_set_style_text_color(battery_percent_label, color_for_soc(data.battery_percent), 0);
   }
 
-  // Highlight icons based on engine state
   if (fuel_icon_canvas && soc_icon_canvas) {
     if (data.engine_on == 1) {
       icon_fuel_color = lv_color_white();
@@ -381,12 +434,14 @@ void ui_set_data(const UiData &data) {
       set_label_text(service_distance_value_label, buf);
     }
   }
-
-  // Drive mode indicator removed
 }
 
 void ui_set_reset_distance_cb(void (*cb)()) {
   reset_distance_cb = cb;
+}
+
+void ui_set_wifi_reconnect_cb(void (*cb)()) {
+  wifi_reconnect_cb = cb;
 }
 
 void updateBatteryLevel(int raw) {
@@ -395,8 +450,10 @@ void updateBatteryLevel(int raw) {
   data.speed_kmh = -1;
   data.fuel_percent = -1;
   data.distance_km = -1;
+  data.ev_distance_km = -1;
   data.service_distance_km = -1;
   data.engine_on = -1;
   data.time_minutes = -1;
+  data.wifi_connected = -1;
   ui_set_data(data);
 }

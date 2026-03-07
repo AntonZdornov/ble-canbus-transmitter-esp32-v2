@@ -14,6 +14,7 @@ static void update_mock_data(UiData &data) {
   static int fuel = 100;
   static float trip_km = 0.0f;
   static float service_km = 123.0f;
+  static float ev_km = 0.0f;
 
   battery += dir;
   if (battery <= 5) {
@@ -25,8 +26,13 @@ static void update_mock_data(UiData &data) {
   }
 
   minutes += 1;
-  rpm += 25;
-  if (rpm > 3500) rpm = 800;
+  bool ev_mode = ((minutes / 20) % 2) == 1;
+  if (ev_mode) {
+    rpm = 0;
+  } else {
+    rpm += 25;
+    if (rpm > 3500) rpm = 800;
+  }
   speed += 1;
   if (speed > 130) speed = 0;
   fuel -= 1;
@@ -34,12 +40,17 @@ static void update_mock_data(UiData &data) {
   float delta = (float)speed * (0.5f / 3600.0f);
   trip_km += delta;
   service_km += delta;
+  if (ev_mode) {
+    ev_km += delta;
+  }
 
   data.battery_percent = battery;
   data.time_minutes = minutes;
   data.speed_kmh = speed;
+  data.wifi_connected = ((minutes / 10) % 2 == 0) ? 1 : 0;
   data.fuel_percent = fuel;
   data.distance_km = (int)(trip_km + 0.5f);
+  data.ev_distance_km = (int)(ev_km + 0.5f);
   data.service_distance_km = (int)(service_km + 0.5f);
   data.engine_on = (rpm > 0) ? 1 : 0;
 }
@@ -71,8 +82,10 @@ int main() {
   UiData data{};
   data.battery_percent = 100;
   data.speed_kmh = 0;
+  data.wifi_connected = 1;
   data.fuel_percent = 100;
   data.distance_km = 0;
+  data.ev_distance_km = 0;
   data.service_distance_km = 123;
   data.engine_on = 0;
   data.time_minutes = 0;

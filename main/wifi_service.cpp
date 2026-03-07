@@ -4,6 +4,9 @@
 
 const char *ssid = "V-LINK";
 const char *password = "";
+static bool manual_reconnect_in_progress = false;
+static uint32_t manual_reconnect_start_ms = 0;
+static const uint32_t manual_reconnect_timeout_ms = 15000;
 
 void initWifi() {
   WiFi.mode(WIFI_STA);
@@ -55,4 +58,32 @@ void initWifi() {
   USBSerial.println("Connected to WiFi");
   USBSerial.println("The WiFi initialized successfully.");
   delay(500);
+}
+
+void requestWifiReconnect() {
+  USBSerial.println("Manual WiFi reconnect requested");
+  WiFi.disconnect(false, false);
+  delay(20);
+  WiFi.begin(ssid, password);
+  manual_reconnect_start_ms = millis();
+  manual_reconnect_in_progress = true;
+}
+
+void wifiServiceTick() {
+  if (!manual_reconnect_in_progress) return;
+
+  if (WiFi.status() == WL_CONNECTED) {
+    manual_reconnect_in_progress = false;
+    USBSerial.println("Manual WiFi reconnect: connected");
+    return;
+  }
+
+  if (millis() - manual_reconnect_start_ms > manual_reconnect_timeout_ms) {
+    manual_reconnect_in_progress = false;
+    USBSerial.println("Manual WiFi reconnect: timeout");
+  }
+}
+
+bool isWifiManualReconnectInProgress() {
+  return manual_reconnect_in_progress;
 }

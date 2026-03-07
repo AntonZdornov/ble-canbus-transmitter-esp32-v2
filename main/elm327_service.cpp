@@ -7,6 +7,76 @@ static const char *ELM327Socket = "192.168.0.10";
 static const uint16_t ELM327Port = 35000;
 static const uint16_t ELM327Timeout = 3000;
 static const uint32_t ELM327LineBufferSize = 96;
+static const uint32_t PidLogIntervalMs = 2000;
+static const uint32_t PidSummaryIntervalMs = 5000;
+
+enum class PidOutcome : uint8_t {
+  Ok = 0,
+  Timeout = 1,
+  NoData = 2,
+  Format = 3,
+};
+
+struct PidStats {
+  const char *name;
+  uint32_t ok;
+  uint32_t timeout;
+  uint32_t no_data;
+  uint32_t format;
+  uint32_t last_log_ms;
+};
+
+static PidStats g_soc_stats = {"SOC", 0, 0, 0, 0, 0};
+static PidStats g_rpm_stats = {"RPM", 0, 0, 0, 0, 0};
+static PidStats g_speed_stats = {"SPD", 0, 0, 0, 0, 0};
+static PidStats g_fuel_stats = {"FUEL", 0, 0, 0, 0, 0};
+static uint32_t g_last_summary_ms = 0;
+
+static uint32_t pidErrorCount(const PidStats &s) {
+  return s.timeout + s.no_data + s.format;
+}
+
+static void maybeLogPidSummary() {
+  uint32_t now = millis();
+  if (now - g_last_summary_ms < PidSummaryIntervalMs) return;
+  g_last_summary_ms = now;
+
+  USBSerial.printf(
+      "ELM summary | SOC %lu/%lu RPM %lu/%lu SPD %lu/%lu FUEL %lu/%lu\n",
+      (unsigned long)g_soc_stats.ok, (unsigned long)pidErrorCount(g_soc_stats),
+      (unsigned long)g_rpm_stats.ok, (unsigned long)pidErrorCount(g_rpm_stats),
+      (unsigned long)g_speed_stats.ok, (unsigned long)pidErrorCount(g_speed_stats),
+      (unsigned long)g_fuel_stats.ok, (unsigned long)pidErrorCount(g_fuel_stats));
+}
+
+static void reportPidOutcome(PidStats &stats, PidOutcome outcome) {
+  const char *label = "unknown";
+  switch (outcome) {
+    case PidOutcome::Ok:
+      stats.ok++;
+      label = "ok";
+      break;
+    case PidOutcome::Timeout:
+      stats.timeout++;
+      label = "timeout";
+      break;
+    case PidOutcome::NoData:
+      stats.no_data++;
+      label = "no_data";
+      break;
+    case PidOutcome::Format:
+      stats.format++;
+      label = "format";
+      break;
+  }
+
+  uint32_t now = millis();
+  if (now - stats.last_log_ms >= PidLogIntervalMs) {
+    USBSerial.printf("ELM %s: %s\n", stats.name, label);
+    stats.last_log_ms = now;
+  }
+  maybeLogPidSummary();
+}
 
 static bool ensureElmConnected(WiFiClient &client) {
   if (WiFi.status() != WL_CONNECTED) {
@@ -107,13 +177,17 @@ bool readSocRaw(WiFiClient &client, uint8_t &soc, uint32_t waitMs) {
   USBSerial.println("Battery request: <01 5B>");
 
   String line;
-  if (!readObdLineWithPrefix(client, "41 5B", line, waitMs)) {
-    USBSerial.println("Timeout waiting for SOC response");
+  bool no_data = false;
+  if (!readObdLineWithPrefix(client, "41 5B", line, waitMs, &no_data)) {
+    reportPidOutcome(g_soc_stats, no_data ? PidOutcome::NoData : PidOutcome::Timeout);
     return false;
   }
 
   std::vector<String> parts;
-  if (!splitTokens(line, parts)) return false;
+  if (!splitTokens(line, parts)) {
+    reportPidOutcome(g_soc_stats, PidOutcome::Format);
+    return false;
+  }
 
   if (parts.size() >= 3 && parts[0] == "41" && parts[1] == "5B") {
     long a = strtol(parts[2].c_str(), nullptr, 16);
@@ -121,12 +195,11 @@ bool readSocRaw(WiFiClient &client, uint8_t &soc, uint32_t waitMs) {
 
     soc = (uint8_t)a;
 
-    USBSerial.print("SOC parsed (raw A): ");
-    USBSerial.println(soc);
+    reportPidOutcome(g_soc_stats, PidOutcome::Ok);
     return true;
   }
 
-  USBSerial.println("SOC response format mismatch");
+  reportPidOutcome(g_soc_stats, PidOutcome::Format);
   return false;
 }
 
@@ -141,13 +214,17 @@ bool readEngineRpm(WiFiClient &client, uint16_t &rpm, uint32_t waitMs) {
   USBSerial.println("RPM request: <01 0C>");
 
   String line;
-  if (!readObdLineWithPrefix(client, "41 0C", line, waitMs)) {
-    USBSerial.println("Timeout waiting for RPM response");
+  bool no_data = false;
+  if (!readObdLineWithPrefix(client, "41 0C", line, waitMs, &no_data)) {
+    reportPidOutcome(g_rpm_stats, no_data ? PidOutcome::NoData : PidOutcome::Timeout);
     return false;
   }
 
   std::vector<String> parts;
-  if (!splitTokens(line, parts)) return false;
+  if (!splitTokens(line, parts)) {
+    reportPidOutcome(g_rpm_stats, PidOutcome::Format);
+    return false;
+  }
 
   if (parts.size() >= 4 && parts[0] == "41" && parts[1] == "0C") {
     long a = strtol(parts[2].c_str(), nullptr, 16);
@@ -156,13 +233,11 @@ bool readEngineRpm(WiFiClient &client, uint16_t &rpm, uint32_t waitMs) {
 
     rpm = (uint16_t)(((a * 256L) + b) / 4L);
 
-    USBSerial.print("Engine RPM: ");
-    USBSerial.print(rpm);
-    USBSerial.println(" rpm");
+    reportPidOutcome(g_rpm_stats, PidOutcome::Ok);
     return true;
   }
 
-  USBSerial.println("RPM response format mismatch");
+  reportPidOutcome(g_rpm_stats, PidOutcome::Format);
   return false;
 }
 
@@ -178,13 +253,17 @@ bool readVehicleSpeed(WiFiClient &client, uint8_t &speedKmh, uint32_t waitMs) {
   USBSerial.println("Speed request: <01 0D>");
 
   String line;
-  if (!readObdLineWithPrefix(client, "41 0D", line, waitMs)) {
-    USBSerial.println("Timeout waiting for Speed response");
+  bool no_data = false;
+  if (!readObdLineWithPrefix(client, "41 0D", line, waitMs, &no_data)) {
+    reportPidOutcome(g_speed_stats, no_data ? PidOutcome::NoData : PidOutcome::Timeout);
     return false;
   }
 
   std::vector<String> parts;
-  if (!splitTokens(line, parts)) return false;
+  if (!splitTokens(line, parts)) {
+    reportPidOutcome(g_speed_stats, PidOutcome::Format);
+    return false;
+  }
 
   if (parts.size() >= 3 && parts[0] == "41" && parts[1] == "0D") {
     long a = strtol(parts[2].c_str(), nullptr, 16);
@@ -192,12 +271,11 @@ bool readVehicleSpeed(WiFiClient &client, uint8_t &speedKmh, uint32_t waitMs) {
 
     speedKmh = (uint8_t)a;
 
-    USBSerial.print("Speed parsed (km/h): ");
-    USBSerial.println(speedKmh);
+    reportPidOutcome(g_speed_stats, PidOutcome::Ok);
     return true;
   }
 
-  USBSerial.println("Speed response format mismatch");
+  reportPidOutcome(g_speed_stats, PidOutcome::Format);
   return false;
 }
 
@@ -250,16 +328,15 @@ bool readFuelLevel(WiFiClient &client, uint8_t &fuelPercent, uint32_t waitMs) {
   String line;
   bool no_data = false;
   if (!readObdLineWithPrefix(client, "41 2F", line, waitMs, &no_data)) {
-    if (no_data) {
-      USBSerial.println("Fuel Level: NO DATA (PID 01 2F not supported)");
-    } else {
-      USBSerial.println("Timeout waiting for Fuel Level response");
-    }
+    reportPidOutcome(g_fuel_stats, no_data ? PidOutcome::NoData : PidOutcome::Timeout);
     return false;
   }
 
   std::vector<String> parts;
-  if (!splitTokens(line, parts)) return false;
+  if (!splitTokens(line, parts)) {
+    reportPidOutcome(g_fuel_stats, PidOutcome::Format);
+    return false;
+  }
 
   if (parts.size() >= 3 && parts[0] == "41" && parts[1] == "2F") {
     long a = strtol(parts[2].c_str(), nullptr, 16);
@@ -267,11 +344,10 @@ bool readFuelLevel(WiFiClient &client, uint8_t &fuelPercent, uint32_t waitMs) {
 
     fuelPercent = (uint8_t)((a * 100UL) / 255UL);
 
-    USBSerial.print("Fuel Level parsed (%): ");
-    USBSerial.println(fuelPercent);
+    reportPidOutcome(g_fuel_stats, PidOutcome::Ok);
     return true;
   }
 
-  USBSerial.println("Fuel Level response format mismatch");
+  reportPidOutcome(g_fuel_stats, PidOutcome::Format);
   return false;
 }
