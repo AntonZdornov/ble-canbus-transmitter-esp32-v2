@@ -109,6 +109,11 @@ static bool ensureElmConnected(WiFiClient &client) {
 }
 
 static bool readObdLineWithPrefix(WiFiClient &client, const char *prefix, String &outLine, uint32_t waitMs, bool *no_data = nullptr) {
+  String normalizedPrefix = String(prefix);
+  normalizedPrefix.toUpperCase();
+  String compactPrefix = normalizedPrefix;
+  compactPrefix.replace(" ", "");
+
   unsigned long start = millis();
   char lineBuf[ELM327LineBufferSize];
   size_t lineLen = 0;
@@ -129,19 +134,21 @@ static bool readObdLineWithPrefix(WiFiClient &client, const char *prefix, String
       lineBuf[lineLen] = '\0';
       String line = String(lineBuf);
       line.trim();
+      line.toUpperCase();
       lineLen = 0;
       if (line.length() == 0) continue;
 
       if (line == ">") continue;
-      if (line == "NO DATA") {
+      String compactLine = line;
+      compactLine.replace(" ", "");
+      if (line == "NO DATA" || compactLine == "NODATA") {
         if (no_data) *no_data = true;
         return false;
       }
 
-      int p = line.indexOf(prefix);
-      if (p >= 0) {
-        outLine = line.substring(p);
-        outLine.trim();
+      int p = line.indexOf(normalizedPrefix);
+      if (p >= 0 || compactLine.indexOf(compactPrefix) >= 0) {
+        outLine = line;
         return true;
       }
     }
@@ -191,12 +198,30 @@ bool readSocRaw(WiFiClient &client, uint8_t &soc, uint32_t waitMs) {
 
   if (parts.size() >= 3 && parts[0] == "41" && parts[1] == "5B") {
     long a = strtol(parts[2].c_str(), nullptr, 16);
-    if (a < 0 || a > 255) return false;
+    if (a < 0 || a > 255) {
+      reportPidOutcome(g_soc_stats, PidOutcome::Format);
+      return false;
+    }
 
     soc = (uint8_t)a;
 
     reportPidOutcome(g_soc_stats, PidOutcome::Ok);
     return true;
+  }
+
+  // Некоторые ELM отдают ответ без пробелов: 415Bxx
+  String compact = line;
+  compact.toUpperCase();
+  compact.replace(" ", "");
+  int idx = compact.indexOf("415B");
+  if (idx >= 0 && compact.length() >= idx + 6) {
+    String byteHex = compact.substring(idx + 4, idx + 6);
+    long a = strtol(byteHex.c_str(), nullptr, 16);
+    if (a >= 0 && a <= 255) {
+      soc = (uint8_t)a;
+      reportPidOutcome(g_soc_stats, PidOutcome::Ok);
+      return true;
+    }
   }
 
   reportPidOutcome(g_soc_stats, PidOutcome::Format);
