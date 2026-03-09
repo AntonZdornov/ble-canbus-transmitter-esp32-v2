@@ -13,6 +13,7 @@ static lv_obj_t *fuel_value_label;
 static lv_obj_t *soc_icon_canvas;
 static lv_obj_t *battery_percent_label;
 static lv_obj_t *service_distance_value_label;
+static lv_obj_t *service_ev_distance_value_label;
 static lv_obj_t *wifi_icon_canvas;
 static void (*reset_distance_cb)() = nullptr;
 static void (*wifi_reconnect_cb)() = nullptr;
@@ -29,6 +30,7 @@ extern const lv_font_t lv_font_montserrat_38;
 extern const lv_font_t lv_font_montserrat_28;
 extern const lv_font_t lv_font_montserrat_26;
 extern const lv_font_t lv_font_montserrat_12;
+extern const lv_font_t lv_font_montserrat_20;
 extern const lv_font_t lv_font_montserrat_22;
 
 static void set_label_text(lv_obj_t *label, const char *text) {
@@ -342,20 +344,38 @@ void ui_init() {
   lv_obj_clear_flag(service_root, LV_OBJ_FLAG_SCROLLABLE);
 
   lv_obj_t *service_title = lv_label_create(service_root);
-  lv_label_set_text(service_title, "Service distance");
+  lv_label_set_text(service_title, "Distance to Service");
   lv_obj_set_style_text_color(service_title, lv_color_hex(0xB0B0B0), 0);
   lv_obj_set_style_text_font(service_title, &lv_font_montserrat_22, 0);
-  lv_obj_align(service_title, LV_ALIGN_CENTER, 0, -50);
+  lv_obj_align(service_title, LV_ALIGN_CENTER, 0, -100);
+
+  lv_obj_t *service_distance_label = lv_label_create(service_root);
+  lv_label_set_text(service_distance_label, "Total Distance");
+  lv_obj_set_style_text_color(service_distance_label, lv_color_hex(0xB0B0B0), 0);
+  lv_obj_set_style_text_font(service_distance_label, &lv_font_montserrat_20, 0);
+  lv_obj_align(service_distance_label, LV_ALIGN_CENTER, 0, -46);
 
   service_distance_value_label = lv_label_create(service_root);
   lv_label_set_text(service_distance_value_label, "-- km");
   lv_obj_set_style_text_color(service_distance_value_label, lv_color_white(), 0);
-  lv_obj_set_style_text_font(service_distance_value_label, &lv_font_montserrat_38, 0);
-  lv_obj_align(service_distance_value_label, LV_ALIGN_CENTER, 0, -10);
+  lv_obj_set_style_text_font(service_distance_value_label, &lv_font_montserrat_20, 0);
+  lv_obj_align(service_distance_value_label, LV_ALIGN_CENTER, 0, -18);
+
+  lv_obj_t *service_ev_distance_label = lv_label_create(service_root);
+  lv_label_set_text(service_ev_distance_label, "EV Distance");
+  lv_obj_set_style_text_color(service_ev_distance_label, lv_color_hex(0xB0B0B0), 0);
+  lv_obj_set_style_text_font(service_ev_distance_label, &lv_font_montserrat_20, 0);
+  lv_obj_align(service_ev_distance_label, LV_ALIGN_CENTER, 0, 14);
+
+  service_ev_distance_value_label = lv_label_create(service_root);
+  lv_label_set_text(service_ev_distance_value_label, "-- km");
+  lv_obj_set_style_text_color(service_ev_distance_value_label, lv_color_white(), 0);
+  lv_obj_set_style_text_font(service_ev_distance_value_label, &lv_font_montserrat_20, 0);
+  lv_obj_align(service_ev_distance_value_label, LV_ALIGN_CENTER, 0, 42);
 
   lv_obj_t *reset_btn = lv_btn_create(service_root);
   lv_obj_set_size(reset_btn, 120, 40);
-  lv_obj_align_to(reset_btn, service_distance_value_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 16);
+  lv_obj_align_to(reset_btn, service_ev_distance_value_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 16);
   lv_obj_add_event_cb(reset_btn, handle_reset_btn_event, LV_EVENT_CLICKED, nullptr);
 
   lv_obj_t *reset_label = lv_label_create(reset_btn);
@@ -432,6 +452,15 @@ void ui_set_data(const UiData &data) {
     } else {
       snprintf(buf, sizeof(buf), "%d km", data.service_distance_km);
       set_label_text(service_distance_value_label, buf);
+    }
+  }
+
+  if (service_ev_distance_value_label) {
+    if (data.ev_distance_km < 0) {
+      set_label_text(service_ev_distance_value_label, "-- km");
+    } else {
+      snprintf(buf, sizeof(buf), "%d km", data.ev_distance_km);
+      set_label_text(service_ev_distance_value_label, buf);
     }
   }
 }

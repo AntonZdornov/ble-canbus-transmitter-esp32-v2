@@ -61,8 +61,11 @@ static int valueWithTtl(int value, uint32_t lastSuccessMs, uint32_t ttlMs, uint3
 
 static void resetDistance() {
   service_km_acc = 0.0f;
+  ev_km_acc = 0.0f;
   lastDistanceUpdateMs = millis();
   prefs.putFloat("service_km", service_km_acc);
+  prefs.putFloat("ev_km", ev_km_acc);
+  lastDistancePersistMs = lastDistanceUpdateMs;
 }
 
 static void onWifiIconPressed() {
@@ -73,6 +76,7 @@ void setup() {
   USBSerial.begin(115200); /* prepare for possible serial debug */
   prefs.begin("trip", false);
   service_km_acc = prefs.getFloat("service_km", 0.0f);
+  ev_km_acc = prefs.getFloat("ev_km", 0.0f);
   lastDistanceUpdateMs = millis();
   initTouth();
   initLvgl();
@@ -170,6 +174,7 @@ void loop() {
 
     if (lastDistancePersistMs == 0 || now - lastDistancePersistMs > 10000) {
       prefs.putFloat("service_km", service_km_acc);
+      prefs.putFloat("ev_km", ev_km_acc);
       lastDistancePersistMs = now;
     }
 
