@@ -24,6 +24,7 @@ static uint32_t lastDistancePersistMs = 0;
 static uint32_t lastObdPollMs = 0;
 static uint32_t lastUiUpdateMs = 0;
 static uint32_t lastFuelQueryMs = 0;
+static const bool ENABLE_FUEL_POLL = false;
 
 static int cached_battery_percent = -1;
 static int cached_speed_kmh = -1;
@@ -43,7 +44,7 @@ enum ObdQueryKind : uint8_t {
 };
 static ObdQueryKind nextObdQuery = OBD_QUERY_SOC;
 
-static const uint32_t OBD_QUERY_INTERVAL_MS = 140;
+static const uint32_t OBD_QUERY_INTERVAL_MS = 220;
 static const uint32_t OBD_QUERY_TIMEOUT_MS = 200;
 static const uint32_t OBD_QUERY_TIMEOUT_FUEL_MS = 120;
 static const uint32_t OBD_FUEL_QUERY_INTERVAL_MS = 2500;
@@ -115,6 +116,9 @@ void loop() {
         break;
       }
       case OBD_QUERY_FUEL: {
+        if (!ENABLE_FUEL_POLL) {
+          break;
+        }
         if (now - lastFuelQueryMs < OBD_FUEL_QUERY_INTERVAL_MS) {
           break;
         }

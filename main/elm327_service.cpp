@@ -1,5 +1,6 @@
 #include "elm327_service.h"
 #include <vector>
+#include <ctype.h>
 #include <WiFi.h>
 #include "globals.h"
 
@@ -172,6 +173,40 @@ static bool splitTokens(const String &line, std::vector<String> &parts) {
   return !parts.empty();
 }
 
+static bool parseHexBytesAfterPrefix(const String &line, const char *prefix, uint8_t *out, size_t count) {
+  if (!out || count == 0) return false;
+
+  String compact = line;
+  compact.toUpperCase();
+  compact.replace(" ", "");
+
+  String compactPrefix = String(prefix);
+  compactPrefix.toUpperCase();
+  compactPrefix.replace(" ", "");
+
+  int idx = compact.indexOf(compactPrefix);
+  if (idx < 0) return false;
+  idx += compactPrefix.length();
+
+  for (size_t i = 0; i < count; i++) {
+    while (idx < (int)compact.length() && !isxdigit((unsigned char)compact[idx])) idx++;
+    if (idx + 1 >= (int)compact.length()) return false;
+    if (!isxdigit((unsigned char)compact[idx]) || !isxdigit((unsigned char)compact[idx + 1])) return false;
+
+    char hexByte[3];
+    hexByte[0] = compact[idx];
+    hexByte[1] = compact[idx + 1];
+    hexByte[2] = '\0';
+
+    long parsed = strtol(hexByte, nullptr, 16);
+    if (parsed < 0 || parsed > 255) return false;
+    out[i] = (uint8_t)parsed;
+    idx += 2;
+  }
+
+  return true;
+}
+
 // ===== SOC (PID 01 5B) =====
 // Возвращает raw байт A (0..255) как раньше
 bool readSocRaw(WiFiClient &client, uint8_t &soc, uint32_t waitMs) {
@@ -254,10 +289,20 @@ bool readEngineRpm(WiFiClient &client, uint16_t &rpm, uint32_t waitMs) {
   if (parts.size() >= 4 && parts[0] == "41" && parts[1] == "0C") {
     long a = strtol(parts[2].c_str(), nullptr, 16);
     long b = strtol(parts[3].c_str(), nullptr, 16);
-    if (a < 0 || a > 255 || b < 0 || b > 255) return false;
+    if (a < 0 || a > 255 || b < 0 || b > 255) {
+      reportPidOutcome(g_rpm_stats, PidOutcome::Format);
+      return false;
+    }
 
     rpm = (uint16_t)(((a * 256L) + b) / 4L);
 
+    reportPidOutcome(g_rpm_stats, PidOutcome::Ok);
+    return true;
+  }
+
+  uint8_t vals[2];
+  if (parseHexBytesAfterPrefix(line, "41 0C", vals, 2)) {
+    rpm = (uint16_t)(((uint16_t)vals[0] * 256U + (uint16_t)vals[1]) / 4U);
     reportPidOutcome(g_rpm_stats, PidOutcome::Ok);
     return true;
   }
@@ -292,10 +337,20 @@ bool readVehicleSpeed(WiFiClient &client, uint8_t &speedKmh, uint32_t waitMs) {
 
   if (parts.size() >= 3 && parts[0] == "41" && parts[1] == "0D") {
     long a = strtol(parts[2].c_str(), nullptr, 16);
-    if (a < 0 || a > 255) return false;
+    if (a < 0 || a > 255) {
+      reportPidOutcome(g_speed_stats, PidOutcome::Format);
+      return false;
+    }
 
     speedKmh = (uint8_t)a;
 
+    reportPidOutcome(g_speed_stats, PidOutcome::Ok);
+    return true;
+  }
+
+  uint8_t vals[1];
+  if (parseHexBytesAfterPrefix(line, "41 0D", vals, 1)) {
+    speedKmh = vals[0];
     reportPidOutcome(g_speed_stats, PidOutcome::Ok);
     return true;
   }
