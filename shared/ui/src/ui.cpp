@@ -456,10 +456,10 @@ void ui_set_data(const UiData &data) {
   }
 
   if (service_ev_distance_value_label) {
-    if (data.ev_distance_km < 0) {
+    if (data.service_ev_distance_km < 0) {
       set_label_text(service_ev_distance_value_label, "-- km");
     } else {
-      snprintf(buf, sizeof(buf), "%d km", data.ev_distance_km);
+      snprintf(buf, sizeof(buf), "%d km", data.service_ev_distance_km);
       set_label_text(service_ev_distance_value_label, buf);
     }
   }
@@ -481,6 +481,7 @@ void updateBatteryLevel(int raw) {
   data.distance_km = -1;
   data.ev_distance_km = -1;
   data.service_distance_km = -1;
+  data.service_ev_distance_km = -1;
   data.engine_on = -1;
   data.time_minutes = -1;
   data.wifi_connected = -1;

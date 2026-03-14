@@ -19,6 +19,7 @@ Preferences prefs;
 static float trip_km_acc = 0.0f;
 static float service_km_acc = 0.0f;
 static float ev_km_acc = 0.0f;
+static float service_ev_km_acc = 0.0f;
 static uint32_t lastDistanceUpdateMs = 0;
 static uint32_t lastDistancePersistMs = 0;
 static uint32_t lastObdPollMs = 0;
@@ -44,7 +45,7 @@ enum ObdQueryKind : uint8_t {
 };
 static ObdQueryKind nextObdQuery = OBD_QUERY_SOC;
 
-static const uint32_t OBD_QUERY_INTERVAL_MS = 220;
+static const uint32_t OBD_QUERY_INTERVAL_MS = 400;
 static const uint32_t OBD_QUERY_TIMEOUT_MS = 200;
 static const uint32_t OBD_QUERY_TIMEOUT_FUEL_MS = 120;
 static const uint32_t OBD_FUEL_QUERY_INTERVAL_MS = 2500;
@@ -61,10 +62,10 @@ static int valueWithTtl(int value, uint32_t lastSuccessMs, uint32_t ttlMs, uint3
 
 static void resetDistance() {
   service_km_acc = 0.0f;
-  ev_km_acc = 0.0f;
+  service_ev_km_acc = 0.0f;
   lastDistanceUpdateMs = millis();
   prefs.putFloat("service_km", service_km_acc);
-  prefs.putFloat("ev_km", ev_km_acc);
+  prefs.putFloat("service_ev_km", service_ev_km_acc);
   lastDistancePersistMs = lastDistanceUpdateMs;
 }
 
@@ -76,7 +77,7 @@ void setup() {
   USBSerial.begin(115200); /* prepare for possible serial debug */
   prefs.begin("trip", false);
   service_km_acc = prefs.getFloat("service_km", 0.0f);
-  ev_km_acc = prefs.getFloat("ev_km", 0.0f);
+  service_ev_km_acc = prefs.getFloat("service_ev_km", 0.0f);
   lastDistanceUpdateMs = millis();
   initTouth();
   initLvgl();
@@ -155,6 +156,7 @@ void loop() {
       service_km_acc += delta;
       if (engine_for_ui == 0) {
         ev_km_acc += delta;
+        service_ev_km_acc += delta;
       }
     }
     lastDistanceUpdateMs = now;
@@ -168,13 +170,14 @@ void loop() {
     data.distance_km = (int)(trip_km_acc + 0.5f);
     data.ev_distance_km = (int)(ev_km_acc + 0.5f);
     data.service_distance_km = (int)(service_km_acc + 0.5f);
+    data.service_ev_distance_km = (int)(service_ev_km_acc + 0.5f);
     data.engine_on = engine_for_ui;
     data.time_minutes = (int)(now / 60000UL);
     data.battery_percent = battery_for_ui;
 
     if (lastDistancePersistMs == 0 || now - lastDistancePersistMs > 10000) {
       prefs.putFloat("service_km", service_km_acc);
-      prefs.putFloat("ev_km", ev_km_acc);
+      prefs.putFloat("service_ev_km", service_ev_km_acc);
       lastDistancePersistMs = now;
     }
 
