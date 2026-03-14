@@ -46,7 +46,7 @@ enum ObdQueryKind : uint8_t {
 static ObdQueryKind nextObdQuery = OBD_QUERY_SOC;
 
 static const uint32_t OBD_QUERY_INTERVAL_MS = 400;
-static const uint32_t OBD_QUERY_TIMEOUT_MS = 200;
+static const uint32_t OBD_QUERY_TIMEOUT_MS = 300;
 static const uint32_t OBD_QUERY_TIMEOUT_FUEL_MS = 120;
 static const uint32_t OBD_FUEL_QUERY_INTERVAL_MS = 2500;
 static const uint32_t UI_UPDATE_INTERVAL_MS = 100;
