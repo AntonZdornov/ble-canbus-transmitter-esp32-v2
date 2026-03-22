@@ -73,6 +73,10 @@ static void onWifiIconPressed() {
   requestWifiReconnect();
 }
 
+static void onWifiTogglePressed() {
+  toggleWifiEnabled();
+}
+
 void setup() {
   USBSerial.begin(115200); /* prepare for possible serial debug */
   prefs.begin("trip", false);
@@ -84,6 +88,7 @@ void setup() {
   ui_init();
   ui_set_reset_distance_cb(resetDistance);
   ui_set_wifi_reconnect_cb(onWifiIconPressed);
+  ui_set_wifi_toggle_cb(onWifiTogglePressed);
   delay(5);
   initWifi();
 }
@@ -163,6 +168,7 @@ void loop() {
 
     UiData data{};
     data.speed_kmh = speed_for_ui;
+    data.wifi_enabled = isWifiEnabled() ? 1 : 0;
     data.wifi_connected = isWifiManualReconnectInProgress()
                               ? 2
                               : ((WiFi.status() == WL_CONNECTED) ? 1 : 0);

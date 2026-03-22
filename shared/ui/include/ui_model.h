@@ -3,6 +3,7 @@
 struct UiData {
   int battery_percent; // 0-100, or -1 if unknown
   int speed_kmh;       // speed in km/h, or -1 if unknown
+  int wifi_enabled;    // 1 enabled, 0 disabled, -1 unknown
   int wifi_connected;  // 1 connected, 0 disconnected, 2 manual reconnect, -1 unknown
   int fuel_percent;    // fuel level, 0-100, or -1 if unknown
   int distance_km;     // total distance, or -1 if unknown

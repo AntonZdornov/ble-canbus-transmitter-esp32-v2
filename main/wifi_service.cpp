@@ -4,14 +4,21 @@
 
 const char *ssid = "V-LINK";
 const char *password = "";
+static bool wifi_enabled = true;
 static bool manual_reconnect_in_progress = false;
 static uint32_t manual_reconnect_start_ms = 0;
 static const uint32_t manual_reconnect_timeout_ms = 15000;
 
-void initWifi() {
+static void beginWifiConnection() {
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
   WiFi.setTxPower(WIFI_POWER_19_5dBm);
+  WiFi.begin(ssid, password);
+}
+
+void initWifi() {
+  wifi_enabled = true;
+  beginWifiConnection();
   USBSerial.println("Scanning WiFi...");
   int networks = WiFi.scanNetworks();
   if (networks >= 0) {
@@ -35,7 +42,6 @@ void initWifi() {
   }
   WiFi.scanDelete();
 
-  WiFi.begin(ssid, password);
   bool animation = true;
 
   USBSerial.println("wifi");
@@ -61,15 +67,36 @@ void initWifi() {
 }
 
 void requestWifiReconnect() {
+  if (!wifi_enabled) {
+    USBSerial.println("Manual WiFi reconnect skipped: WiFi disabled");
+    return;
+  }
   USBSerial.println("Manual WiFi reconnect requested");
   WiFi.disconnect(false, false);
   delay(20);
-  WiFi.begin(ssid, password);
+  beginWifiConnection();
   manual_reconnect_start_ms = millis();
   manual_reconnect_in_progress = true;
 }
 
+void toggleWifiEnabled() {
+  wifi_enabled = !wifi_enabled;
+  manual_reconnect_in_progress = false;
+
+  if (wifi_enabled) {
+    USBSerial.println("WiFi enabled");
+    beginWifiConnection();
+    return;
+  }
+
+  USBSerial.println("WiFi disabled");
+  WiFi.disconnect(true, false);
+  delay(20);
+  WiFi.mode(WIFI_OFF);
+}
+
 void wifiServiceTick() {
+  if (!wifi_enabled) return;
   if (!manual_reconnect_in_progress) return;
 
   if (WiFi.status() == WL_CONNECTED) {
@@ -86,4 +113,8 @@ void wifiServiceTick() {
 
 bool isWifiManualReconnectInProgress() {
   return manual_reconnect_in_progress;
+}
+
+bool isWifiEnabled() {
+  return wifi_enabled;
 }

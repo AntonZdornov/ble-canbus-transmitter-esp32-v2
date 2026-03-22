@@ -15,8 +15,10 @@ static lv_obj_t *battery_percent_label;
 static lv_obj_t *service_distance_value_label;
 static lv_obj_t *service_ev_distance_value_label;
 static lv_obj_t *wifi_icon_canvas;
+static lv_obj_t *wifi_toggle_label;
 static void (*reset_distance_cb)() = nullptr;
 static void (*wifi_reconnect_cb)() = nullptr;
+static void (*wifi_toggle_cb)() = nullptr;
 
 static lv_color_t icon_fuel_color = {0};
 static lv_color_t icon_soc_color = {0};
@@ -176,6 +178,12 @@ static void handle_wifi_icon_event(lv_event_t *e) {
   }
 }
 
+static void handle_wifi_toggle_btn_event(lv_event_t *e) {
+  if (lv_event_get_code(e) == LV_EVENT_CLICKED && wifi_toggle_cb) {
+    wifi_toggle_cb();
+  }
+}
+
 void ui_init() {
   main_screen = lv_obj_create(NULL);
   service_screen = lv_obj_create(NULL);
@@ -183,6 +191,8 @@ void ui_init() {
 
   lv_obj_add_event_cb(main_screen, handle_gesture_event, LV_EVENT_GESTURE, nullptr);
   lv_obj_add_event_cb(service_screen, handle_gesture_event, LV_EVENT_GESTURE, nullptr);
+  lv_obj_set_scroll_dir(service_screen, LV_DIR_VER);
+  lv_obj_set_scrollbar_mode(service_screen, LV_SCROLLBAR_MODE_OFF);
 
   lv_obj_t *root_container = lv_obj_create(main_screen);
   lv_obj_set_size(root_container, LV_PCT(100), LV_PCT(100));
@@ -209,11 +219,19 @@ void ui_init() {
   lv_obj_set_style_text_color(time_value_label, lv_color_white(), 0);
   lv_obj_set_style_text_font(time_value_label, &lv_font_montserrat_22, 0);
 
-  wifi_icon_canvas = lv_canvas_create(header_row);
+  lv_obj_t *wifi_icon_hitbox = lv_obj_create(header_row);
+  lv_obj_set_size(wifi_icon_hitbox, 44, 44);
+  lv_obj_set_style_bg_opa(wifi_icon_hitbox, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(wifi_icon_hitbox, 0, 0);
+  lv_obj_set_style_pad_all(wifi_icon_hitbox, 0, 0);
+  lv_obj_clear_flag(wifi_icon_hitbox, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(wifi_icon_hitbox, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(wifi_icon_hitbox, handle_wifi_icon_event, LV_EVENT_CLICKED, nullptr);
+
+  wifi_icon_canvas = lv_canvas_create(wifi_icon_hitbox);
   lv_canvas_set_buffer(wifi_icon_canvas, wifi_icon_buf, 22, 22, LV_IMG_CF_TRUE_COLOR);
   draw_wifi_icon(wifi_icon_canvas, lv_color_hex(0x6C6C6C), false);
-  lv_obj_add_flag(wifi_icon_canvas, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_add_event_cb(wifi_icon_canvas, handle_wifi_icon_event, LV_EVENT_CLICKED, nullptr);
+  lv_obj_center(wifi_icon_canvas);
 
   lv_obj_t *bottom_row = lv_obj_create(root_container);
   lv_obj_set_size(bottom_row, LV_PCT(100), LV_SIZE_CONTENT);
@@ -336,7 +354,7 @@ void ui_init() {
   lv_obj_set_style_text_font(battery_percent_label, &lv_font_montserrat_28, 0);
 
   lv_obj_t *service_root = lv_obj_create(service_screen);
-  lv_obj_set_size(service_root, LV_PCT(100), LV_PCT(100));
+  lv_obj_set_size(service_root, LV_PCT(100), LV_PCT(135));
   lv_obj_set_style_pad_all(service_root, 10, LV_PART_MAIN);
   lv_obj_set_style_border_width(service_root, 0, LV_PART_MAIN);
   lv_obj_set_style_bg_color(service_root, lv_color_black(), LV_PART_MAIN);
@@ -381,6 +399,15 @@ void ui_init() {
   lv_obj_t *reset_label = lv_label_create(reset_btn);
   lv_label_set_text(reset_label, "Reset");
   lv_obj_center(reset_label);
+
+  lv_obj_t *wifi_toggle_btn = lv_btn_create(service_root);
+  lv_obj_set_size(wifi_toggle_btn, 120, 40);
+  lv_obj_align_to(wifi_toggle_btn, reset_btn, LV_ALIGN_OUT_BOTTOM_MID, 0, 12);
+  lv_obj_add_event_cb(wifi_toggle_btn, handle_wifi_toggle_btn_event, LV_EVENT_CLICKED, nullptr);
+
+  wifi_toggle_label = lv_label_create(wifi_toggle_btn);
+  lv_label_set_text(wifi_toggle_label, "WiFi Off");
+  lv_obj_center(wifi_toggle_label);
 }
 
 void ui_set_data(const UiData &data) {
@@ -388,6 +415,16 @@ void ui_set_data(const UiData &data) {
 
   format_time_minutes(data.time_minutes, buf, sizeof(buf));
   set_label_text(time_value_label, buf);
+
+  if (wifi_toggle_label) {
+    if (data.wifi_enabled == 1) {
+      set_label_text(wifi_toggle_label, "WiFi Off");
+    } else if (data.wifi_enabled == 0) {
+      set_label_text(wifi_toggle_label, "WiFi On");
+    } else {
+      set_label_text(wifi_toggle_label, "WiFi");
+    }
+  }
 
   if (data.wifi_connected == 1) {
     draw_wifi_icon(wifi_icon_canvas, lv_color_hex(0x6CEB6C), true);
@@ -473,10 +510,15 @@ void ui_set_wifi_reconnect_cb(void (*cb)()) {
   wifi_reconnect_cb = cb;
 }
 
+void ui_set_wifi_toggle_cb(void (*cb)()) {
+  wifi_toggle_cb = cb;
+}
+
 void updateBatteryLevel(int raw) {
   UiData data{};
   data.battery_percent = raw;
   data.speed_kmh = -1;
+  data.wifi_enabled = -1;
   data.fuel_percent = -1;
   data.distance_km = -1;
   data.ev_distance_km = -1;
